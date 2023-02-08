@@ -140,7 +140,7 @@ def main():
 
         for iteration, batch in enumerate(training_data_loader, 1):
             input_rgb, _, input_lr_u, ref = Variable(batch[0]).cuda(), Variable(batch[1]).cuda(), Variable( batch[2]).cuda(), Variable(batch[3], requires_grad=False).cuda()
-            out = model(input_rgb, ref)
+            out = model(input_rgb, input_lr_u)
 
             loss_L1 = loss1(out, ref)
             loss_ssim = loss2(out, ref)

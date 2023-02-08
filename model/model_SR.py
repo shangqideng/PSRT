@@ -1,11 +1,4 @@
 # -*- encoding: utf-8 -*-
-"""
-@File    : model_SR.py
-@Time    : 2021/12/2 17:02
-@Author  : Shangqi Deng
-@Email   : dengsq5856@126.com
-@Software: PyCharm
-"""
 from torch import optim
 from psrt import Block
 import torch
