@@ -4,7 +4,7 @@ Code for the paper: "PSRT: Pyramid Shuffle-and-Reshuffle Transformer for Multisp
 Python 3.8.5 + Pytorch 1.11.0
 ______
 ### Data
-The simulation of our data refers to [1] and [2]
+The simulation of our data refers to [1] and [2].
 
 Complete training and test data download link:
 1. <https://pan.baidu.com/s/1SLR0QKVyMWOOuYIYgcNv_Q?pwd=7ja6>
