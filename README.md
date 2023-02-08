@@ -4,6 +4,11 @@ Code for the paper: "PSRT: Pyramid Shuffle-and-Reshuffle Transformer for Multisp
 Python 3.8.5 + Pytorch 1.11.0
 ______
 ### Data
-The R matrix about CAVE 
 Complete training and test data download link:
 1. <https://drive.google.com/drive/folders/11EsA_qLtf306RxEReFSA_iKltdpn-IJT>
+2. <https://pan.baidu.com/s/1QOClak9iHHhC8Mo1mpVcRQ> Password：kjra
+______
+### Code
+main_x4.py: The training function of our PSRT.
+eval_x4.py: The testing function of our PSRT.
+model_SR.py: The network of our PSRT.
