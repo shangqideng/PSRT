@@ -42,7 +42,7 @@ from PIL import Image
 
 parser = argparse.ArgumentParser(description='PyTorch Super Res Example')
 parser.add_argument('--dataset', type=str, default='F:\Data\HSI\cave_x4')
-parser.add_argument('--image_size', type=int, default=256)
+parser.add_argument('--image_size', type=int, default=512)
 parser.add_argument('--n_bands', type=int, default=31)
 parser.add_argument('--testBatchSize', type=int, default=1, help='testing batch size')
 parser.add_argument('--threads', type=int, default=4, help='number of threads for data loader to use')
@@ -62,7 +62,7 @@ def test(test_data_loader):
     checkpoint = torch.load(opt.model_path)
     model.load_state_dict(checkpoint["model"].state_dict())
     model.eval()
-    output = np.zeros((44, opt.image_size, opt.image_size, opt.n_bands))
+    output = np.zeros((11, opt.image_size, opt.image_size, opt.n_bands))
 
     psnr_list = []
     sam_list = []

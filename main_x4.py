@@ -143,9 +143,9 @@ def main():
             out = model(input_rgb, input_lr_u)
 
             loss_L1 = loss1(out, ref)
-            loss_ssim = loss2(out, ref)
+            # loss_ssim = loss2(out, ref)
 
-            loss = loss_L1 + 0.1*loss_ssim
+            loss = loss_L1
 
             optimizer.zero_grad()
             loss.backward()
@@ -162,20 +162,20 @@ def main():
                                                                     loss.item()))
 
         model.eval()
-        for index, batch in enumerate(val_data_loader):
-            input_rgb, _, input_lr_u, ref = Variable(batch[0], volatile=True).cuda(), Variable(batch[1], volatile=True).cuda(), Variable(
-                batch[2], volatile=True).cuda(), Variable(batch[3], requires_grad=False, volatile=True).cuda()
-            out = model(input_rgb, input_lr_u)
-        ref = ref.detach().cpu().numpy()
-        out = out.detach().cpu().numpy()
-        psnr = calc_psnr(ref, out)
-        rmse = calc_rmse(ref, out)
-        ergas = calc_ergas(ref, out)
-        sam = calc_sam(ref, out)
-        print('RMSE:   {:.4f};'.format(rmse))
-        print('PSNR:   {:.4f};'.format(psnr))
-        print('ERGAS:   {:.4f};'.format(ergas))
-        print('SAM:   {:.4f}.'.format(sam))
+        with torch.no_grad():
+            for index, batch in enumerate(val_data_loader):
+                input_rgb, _, input_lr_u, ref = batch[0].cuda(), batch[1].cuda(), batch[2].cuda(), batch[3].cuda()
+                out = model(input_rgb, input_lr_u)
+            ref = ref.detach().cpu().numpy()
+            out = out.detach().cpu().numpy()
+            psnr = calc_psnr(ref, out)
+            rmse = calc_rmse(ref, out)
+            ergas = calc_ergas(ref, out)
+            sam = calc_sam(ref, out)
+            print('RMSE:   {:.4f};'.format(rmse))
+            print('PSNR:   {:.4f};'.format(psnr))
+            print('ERGAS:   {:.4f};'.format(ergas))
+            print('SAM:   {:.4f}.'.format(sam))
         if epoch % 50 == 0:
             save_checkpoint(model, epoch, t, opt.dataset)
 
