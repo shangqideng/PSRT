@@ -31,13 +31,21 @@ ______
 If you find this code helpful, please kindly cite:
 
 @ARTICLE{dengtgrs2023,
+
 author={Shang-Qi Deng, Liang-Jian Deng, Xiao Wu, Ran Ran, Danfeng Hong, Gemine Vivone },
+
 journal={ IEEE Transactions on Geoscience and Remote Sensing },
+
 title={ PSRT: Pyramid Shuffle-and-Reshuffle Transformer for Multispectral and Hyperspectral Image Fusion },
+
 year={2023},
+
 volume={14},
+
 number={},
+
 pages={},
+
 doi={ 10.1109/TGRS.2023.3244750 }
    }
 
