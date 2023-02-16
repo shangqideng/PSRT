@@ -18,7 +18,7 @@ class DatasetFromHdf5(data.Dataset):
         print(dataset.keys())
         self.GT = dataset.get("GT")
         self.UP = dataset.get("HSI_up")
-        self.LRHSI = dataset.get("LRHSI")
+        self.LRHSI = dataset.get("HSI_up")
         self.RGB = dataset.get("RGB")
 
     #####必要函数
@@ -41,14 +41,14 @@ def get_test_set(root_dir):
 from PIL import Image
 
 parser = argparse.ArgumentParser(description='PyTorch Super Res Example')
-parser.add_argument('--dataset', type=str, default='F:\Data\HSI\cave_x4')
-parser.add_argument('--image_size', type=int, default=512)
+parser.add_argument('--dataset', type=str, default='F:\Data\old_HSI\cave_x4')
+parser.add_argument('--image_size', type=int, default=256)
 parser.add_argument('--n_bands', type=int, default=31)
 parser.add_argument('--testBatchSize', type=int, default=1, help='testing batch size')
 parser.add_argument('--threads', type=int, default=4, help='number of threads for data loader to use')
 parser.add_argument('--cuda', action='store_true', help='use cuda?')
 parser.add_argument('--model_path', type=str,
-                    default='./checkpoints/PSRT_cave_x4_202302081324/model_epoch_0.pth.tar',
+                    default='./pretrained model/cave_x4/best.pth.tar',
                     help='path for trained encoder')
 opt = parser.parse_args()
 
@@ -60,9 +60,24 @@ test_data_loader = DataLoader(dataset=test_set,  batch_size=opt.testBatchSize, s
 def test(test_data_loader):
     model = PSRTnet(opt).cuda()
     checkpoint = torch.load(opt.model_path)
-    model.load_state_dict(checkpoint["model"].state_dict())
+    # model.load_state_dict(checkpoint["model"].state_dict())
+
+    # model = torch.load(opt.model_path)
+
+    # if you want to use the pretrained checkpoints, use the blow code instead.
+    state_dict = checkpoint['state_dict']
+    dict = {}
+    for module in state_dict.items():
+        k, v = module
+        if 'model' in k:
+            k = k.strip('model.')
+        dict[k] = v
+    checkpoint['state_dict'] = dict
+    model.load_state_dict(checkpoint['state_dict'])
+
+
     model.eval()
-    output = np.zeros((11, opt.image_size, opt.image_size, opt.n_bands))
+    output = np.zeros((44, opt.image_size, opt.image_size, opt.n_bands))
 
     psnr_list = []
     sam_list = []
@@ -95,7 +110,7 @@ def test(test_data_loader):
     print('PSNR:   {:.4f};'.format(np.array(psnr_list).mean()))
     print('SAM:   {:.4f};'.format(np.array(sam_list).mean()))
     print('ERGAS:   {:.4f};'.format(np.array(ergas_list).mean()))
-    sio.savemat('cave11-psrt.mat', {'output': output})
+    sio.savemat('cave11-psrt-256.mat', {'output': output})
 
 
 

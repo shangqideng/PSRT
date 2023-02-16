@@ -101,6 +101,18 @@ class Attention(nn.Module):
         x = self.proj_drop(x)
         return x
 
+    def flops(self, N):
+        # calculate flops for 1 window with token length of N
+        flops = 0
+        # qkv = self.qkv(x)
+        flops += N * self.dim * 3 * self.dim
+        # attn = (q @ k.transpose(-2, -1))
+        flops += self.num_heads * N * (self.dim // self.num_heads) * N
+        #  x = (attn @ v)
+        flops += self.num_heads * N * N * (self.dim // self.num_heads)
+        # x = self.proj(x)
+        flops += N * self.dim * self.dim
+        return flops
 
 class Window_Attention(nn.Module):
     r""" PSRT Transformer Block.
@@ -122,22 +134,23 @@ class Window_Attention(nn.Module):
 
     def __init__(self, dim=32, input_resolution=16, num_heads=8, window_size=4,
                  mlp_ratio=4., qkv_bias=True, qk_scale=4, drop=0., attn_drop=0., drop_path=0.,
-                 act_layer=nn.GELU, norm_layer=nn.LayerNorm):
+                 act_layer=nn.GELU, norm_layer=nn.LayerNorm, win=True):
         super().__init__()
         self.dim = dim
         self.input_resolution = to_2tuple(input_resolution)
         self.num_heads = num_heads
         self.window_size = window_size
         self.mlp_ratio = mlp_ratio
+        self.win = win
 
         assert 0 <= self.window_size <= input_resolution, "input_resolution should be larger than window_size"
 
+        self.norm1 = norm_layer(dim)
         self.attn = Attention(
             dim, num_heads=num_heads,
             qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
 
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
-        self.norm1 = norm_layer(dim)
         self.norm2 = norm_layer(dim)
         mlp_hidden_dim = int(dim * mlp_ratio)
         self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
@@ -149,172 +162,29 @@ class Window_Attention(nn.Module):
 
         shortcut = x
 
-        x = x.view(B, H, W, C)
-        x = self.norm1(x)
-        # partition windows
-        x_windows = window_partition(x, self.window_size)  # nW*B, window_size, window_size, C
+        if self.win:
+            # partition windows
+            x = self.norm1(x)
+            x = x.view(B, H, W, C)
+            x_windows = window_partition(x, self.window_size)  # nW*B, window_size, window_size, C
 
-        x_windows = x_windows.view(-1, self.window_size * self.window_size, C)  # nW*B, window_size*window_size, C
+            x_windows = x_windows.view(-1, self.window_size * self.window_size, C)  # nW*B, window_size*window_size, C
 
-        # attention
-        attn_windows = self.attn(x_windows)  # nW*B, window_size*window_size, C
+            # attention
+            attn_windows = self.attn(x_windows)  # nW*B, window_size*window_size, C
 
-        # merge windows
-        attn_windows = attn_windows.view(-1, self.window_size, self.window_size, C)
-        x = window_reverse(attn_windows, self.window_size, H, W)  # B H' W' C
-        x = x.view(B, H * W, C)
-        # FFN
-        x = shortcut + self.drop_path(x)
-        x = x + self.drop_path(self.mlp(self.norm2(x)))
-        x = rearrange(x, 'B (H W) C -> B C H W', H=H)
-        return x
-
-
-class Window_Attention_Shuffle(nn.Module):
-    r""" PSRT Transformer Block.
-
-    Args:
-        dim (int): Number of input channels.
-        input_resolution (tuple[int]): Input resulotion.
-        num_heads (int): Number of attention heads.
-        window_size (int): Window size.
-        mlp_ratio (float): Ratio of mlp hidden dim to embedding dim.
-        qkv_bias (bool, optional): If True, add a learnable bias to query, key, value. Default: True
-        qk_scale (float | None, optional): Override default qk scale of head_dim ** -0.5 if set.
-        drop (float, optional): Dropout rate. Default: 0.0
-        attn_drop (float, optional): Attention dropout rate. Default: 0.0
-        drop_path (float, optional): Stochastic depth rate. Default: 0.0
-        act_layer (nn.Module, optional): Activation layer. Default: nn.GELU
-        norm_layer (nn.Module, optional): Normalization layer.  Default: nn.LayerNorm
-    """
-
-    def __init__(self, dim=32, input_resolution=16, num_heads=8, window_size=4,
-                 mlp_ratio=4., qkv_bias=True, qk_scale=4, drop=0., attn_drop=0., drop_path=0.,
-                 act_layer=nn.GELU, norm_layer=nn.LayerNorm):
-        super().__init__()
-        self.dim = dim
-        self.input_resolution = to_2tuple(input_resolution)
-        self.num_heads = num_heads
-        self.window_size = window_size
-        self.mlp_ratio = mlp_ratio
-
-        assert 0 <= self.window_size <= input_resolution, "input_resolution should be larger than window_size"
-
-        self.attn = Attention(
-            dim, num_heads=num_heads,
-            qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
-
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
-        self.norm1 = norm_layer(dim)
-        self.norm2 = norm_layer(dim)
-        mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
-
-    def forward(self, H, W, x):
-        x = rearrange(x, 'B C H W -> B (H W) C')
-        B, L, C = x.shape
-        assert L == H * W, "input feature has wrong size"
-
-        shortcut = x
-
-        x = x.view(B, H, W, C)
-        x = self.norm1(x)
-        # shuffle
-        x = rearrange(x, 'B H W C -> B C H W')
-        x = Win_Shuffle(x, self.window_size)
-        x = rearrange(x, 'B C H W -> B H W C')
-
-        # partition windows
-
-        x_windows = window_partition(x, self.window_size)  # nW*B, window_size, window_size, C
-
-        x_windows = x_windows.view(-1, self.window_size * self.window_size, C)  # nW*B, window_size*window_size, C
-
-        # attention
-        attn_windows = self.attn(x_windows)  # nW*B, window_size*window_size, C
-
-        # merge windows
-        attn_windows = attn_windows.view(-1, self.window_size, self.window_size, C)
-        x = window_reverse(attn_windows, self.window_size, H, W)  # B H' W' C
-        x = x.view(B, H * W, C)
-        # FFN
-        x = shortcut + self.drop_path(x)
-        x = x + self.drop_path(self.mlp(self.norm2(x)))
-
-        x = rearrange(x, 'B (H W) C -> B C H W', H=H)
-        return x
-
-
-class Window_Attention_Reshuffle(nn.Module):
-    r""" PSRT Transformer Block.
-
-    Args:
-        dim (int): Number of input channels.
-        input_resolution (tuple[int]): Input resulotion.
-        num_heads (int): Number of attention heads.
-        window_size (int): Window size.
-        mlp_ratio (float): Ratio of mlp hidden dim to embedding dim.
-        qkv_bias (bool, optional): If True, add a learnable bias to query, key, value. Default: True
-        qk_scale (float | None, optional): Override default qk scale of head_dim ** -0.5 if set.
-        drop (float, optional): Dropout rate. Default: 0.0
-        attn_drop (float, optional): Attention dropout rate. Default: 0.0
-        drop_path (float, optional): Stochastic depth rate. Default: 0.0
-        act_layer (nn.Module, optional): Activation layer. Default: nn.GELU
-        norm_layer (nn.Module, optional): Normalization layer.  Default: nn.LayerNorm
-    """
-
-    def __init__(self, dim=32, input_resolution=16, num_heads=8, window_size=4,
-                 mlp_ratio=4., qkv_bias=True, qk_scale=4, drop=0., attn_drop=0., drop_path=0.,
-                 act_layer=nn.GELU, norm_layer=nn.LayerNorm):
-        super().__init__()
-        self.dim = dim
-        self.input_resolution = to_2tuple(input_resolution)
-        self.num_heads = num_heads
-        self.window_size = window_size
-        self.mlp_ratio = mlp_ratio
-
-        assert 0 <= self.window_size <= input_resolution, "input_resolution should be larger than window_size"
-
-        self.attn = Attention(
-            dim, num_heads=num_heads,
-            qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
-
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
-        self.norm1 = norm_layer(dim)
-        self.norm2 = norm_layer(dim)
-        mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
-
-    def forward(self, H, W, x):
-        x = rearrange(x, 'B C H W -> B (H W) C')
-        B, L, C = x.shape
-        assert L == H * W, "input feature has wrong size"
-
-        shortcut = x
-
-        x = x.view(B, H, W, C)
-        x = self.norm1(x)
-        # shuffle
-        x = rearrange(x, 'B H W C -> B C H W')
-        x = Win_Reshuffle(x, self.window_size)
-        x = rearrange(x, 'B C H W -> B H W C')
-
-        # partition windows
-
-        x_windows = window_partition(x, self.window_size)  # nW*B, window_size, window_size, C
-
-        x_windows = x_windows.view(-1, self.window_size * self.window_size, C)  # nW*B, window_size*window_size, C
-
-        # attention
-        attn_windows = self.attn(x_windows)  # nW*B, window_size*window_size, C
-
-        # merge windows
-        attn_windows = attn_windows.view(-1, self.window_size, self.window_size, C)
-        x = window_reverse(attn_windows, self.window_size, H, W)  # B H' W' C
-        x = x.view(B, H * W, C)
-        # FFN
-        x = shortcut + self.drop_path(x)
-        x = x + self.drop_path(self.mlp(self.norm2(x)))
+            # merge windows
+            attn_windows = attn_windows.view(-1, self.window_size, self.window_size, C)
+            x = window_reverse(attn_windows, self.window_size, H, W)  # B H' W' C
+            x = x.view(B, H * W, C)
+            # FFN
+            x = shortcut + self.drop_path(x)
+            x = x + self.drop_path(self.mlp(self.norm2(x)))
+        else:
+            x = self.norm1(x)
+            x = self.attn(x)
+            x = shortcut + self.drop_path(x)
+            x = x + self.drop_path(self.mlp(self.norm2(x)))
 
         x = rearrange(x, 'B (H W) C -> B C H W', H=H)
         return x
@@ -381,8 +251,8 @@ def Win_Reshuffle(x, win_size):
 
     return xt
 
-class SaR_Block(nn.Module):
-    def __init__(self, img_size=64, in_chans=32, head=8, win_size=4, norm_layer=nn.LayerNorm):
+class W2W_Block(nn.Module):
+    def __init__(self, img_size=64, in_chans=32, head=8, win_size=4):
         """
         input: B x F x H x W
         :param img_size: size of image
@@ -394,13 +264,11 @@ class SaR_Block(nn.Module):
         self.img_size = img_size
         self.in_channels = in_chans
         self.win_size = win_size
-        self.norm2 = norm_layer(in_chans)
-        self.norm3 = norm_layer(in_chans)
         self.WA1 = Window_Attention(dim=self.in_channels, input_resolution=img_size, num_heads=head,
                                     window_size=win_size)
-        self.WA2 = Window_Attention_Shuffle(dim=self.in_channels, input_resolution=img_size, num_heads=head,
+        self.WA2 = Window_Attention(dim=self.in_channels, input_resolution=img_size, num_heads=head,
                                     window_size=win_size)
-        self.WA3 = Window_Attention_Reshuffle(dim=self.in_channels, input_resolution=img_size, num_heads=head,
+        self.WA3 = Window_Attention(dim=self.in_channels, input_resolution=img_size, num_heads=head,
                                     window_size=win_size)
 
 
@@ -410,10 +278,14 @@ class SaR_Block(nn.Module):
         x = self.WA1(H, W, x)
 
         # shuffle
+        x = Win_Shuffle(x, self.win_size)
+
         # window_attention2
         x = self.WA2(H, W, x)
 
         # reshuffle
+        x = Win_Reshuffle(x, self.win_size)
+
         # window_attention3
         x = self.WA3(H, W, x)
 
@@ -421,7 +293,7 @@ class SaR_Block(nn.Module):
 
         return x
 
-class PSRT_Block(nn.Module):
+class Pyramid_Block(nn.Module):
     def __init__(self, num=3, img_size=64, in_chans=32, head=8, win_size=8):
         """
         input: B x H x W x F
@@ -433,7 +305,7 @@ class PSRT_Block(nn.Module):
         self.num_layers = num
         self.layers = nn.ModuleList()
         for i_layer in range(self.num_layers):
-            layer = SaR_Block(img_size=img_size, in_chans=in_chans, head=head, win_size=win_size//(2**i_layer))
+            layer = W2W_Block(img_size=img_size, in_chans=in_chans, head=head, win_size=win_size//(2**i_layer))
             self.layers.append(layer)
 
     def forward(self, H, W, x):
@@ -448,23 +320,14 @@ class Block(nn.Module):
         self.layers = nn.ModuleList()
         self.conv = nn.Conv2d(in_channels=in_chans, out_channels=embed_dim, kernel_size=3, stride=1, padding=1)
         for i_layer in range(self.num_layers):
-            layer = PSRT_Block(num=inside_num, img_size=img_size, in_chans=embed_dim, head=head, win_size=win_size)
+            layer = Pyramid_Block(num=inside_num, img_size=img_size, in_chans=embed_dim, head=head, win_size=win_size)
             self.layers.append(layer)
 
-    def forward(self,H, W, x):
+    def forward(self, H, W, x):
         x = self.conv(x)
         for layer in self.layers:
             x = layer(H, W, x)
         return x
-
-# if __name__ == '__main__':
-#     import time
-#     start = time.time()
-#     input = torch.randn(1, 32, 64, 64)
-#     encoder = Block(out_num=2, inside_num=3, img_size=64, in_chans=32, embed_dim=32, head=8, win_size=8)
-#     output = encoder(64, 64, input)
-#     print(output.shape)
-
 
 def init_weights(*modules):
     for module in modules:
