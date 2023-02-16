@@ -39,4 +39,5 @@ doi={ 10.1109/TGRS.2023.3244750 }
 
 
 [1] Akhtar, Naveed, Faisal Shafait, and Ajmal Mian. "Sparse Spatio-spectral Representation for Hyperspectral Image Super-Resolution." ECCV, 2014. 63-78.
+
 [2] N. Yokoya, C. Grohnfeldt, and J. Chanussot, "Hyperspectral and multispectral data fusion: a comparative review of the recent literature," IEEE Geoscience and Remote Sensing Magazine, vol.5, no. 2, pp. 29-56, June 2017.
