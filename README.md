@@ -4,11 +4,11 @@ Code for the paper: "PSRT: Pyramid Shuffle-and-Reshuffle Transformer for Multisp
 Python 3.8.5 + Pytorch 1.11.0
 ______
 
-### pretrained models
+### Pretrained models
 The pretrained checkpoints list in the .\pretrained model\
 ______
 
-### source training && testing codes
+### Source training && testing codes
 main_x4.py: The training function of our PSRT.
 
 eval_x4.py: The testing function of our PSRT.
@@ -23,7 +23,7 @@ Complete training and test data download link:
 1. <https://pan.baidu.com/s/1SLR0QKVyMWOOuYIYgcNv_Q?pwd=7ja6>
 ______
 
-### BiB reference
+### Bib reference
 If you find this code helpful, please kindly cite:
 
 @ARTICLE{dengtgrs2023,
