@@ -134,14 +134,13 @@ class Window_Attention(nn.Module):
 
     def __init__(self, dim=32, input_resolution=16, num_heads=8, window_size=4,
                  mlp_ratio=4., qkv_bias=True, qk_scale=4, drop=0., attn_drop=0., drop_path=0.,
-                 act_layer=nn.GELU, norm_layer=nn.LayerNorm, win=True):
+                 act_layer=nn.GELU, norm_layer=nn.LayerNorm):
         super().__init__()
         self.dim = dim
         self.input_resolution = to_2tuple(input_resolution)
         self.num_heads = num_heads
         self.window_size = window_size
         self.mlp_ratio = mlp_ratio
-        self.win = win
 
         assert 0 <= self.window_size <= input_resolution, "input_resolution should be larger than window_size"
 
@@ -162,29 +161,22 @@ class Window_Attention(nn.Module):
 
         shortcut = x
 
-        if self.win:
-            # partition windows
-            x = self.norm1(x)
-            x = x.view(B, H, W, C)
-            x_windows = window_partition(x, self.window_size)  # nW*B, window_size, window_size, C
+        x = self.norm1(x)
+        x = x.view(B, H, W, C)
+        x_windows = window_partition(x, self.window_size)  # nW*B, window_size, window_size, C
 
-            x_windows = x_windows.view(-1, self.window_size * self.window_size, C)  # nW*B, window_size*window_size, C
+        x_windows = x_windows.view(-1, self.window_size * self.window_size, C)  # nW*B, window_size*window_size, C
 
-            # attention
-            attn_windows = self.attn(x_windows)  # nW*B, window_size*window_size, C
+        # attention
+        attn_windows = self.attn(x_windows)  # nW*B, window_size*window_size, C
 
-            # merge windows
-            attn_windows = attn_windows.view(-1, self.window_size, self.window_size, C)
-            x = window_reverse(attn_windows, self.window_size, H, W)  # B H' W' C
-            x = x.view(B, H * W, C)
-            # FFN
-            x = shortcut + self.drop_path(x)
-            x = x + self.drop_path(self.mlp(self.norm2(x)))
-        else:
-            x = self.norm1(x)
-            x = self.attn(x)
-            x = shortcut + self.drop_path(x)
-            x = x + self.drop_path(self.mlp(self.norm2(x)))
+        # merge windows
+        attn_windows = attn_windows.view(-1, self.window_size, self.window_size, C)
+        x = window_reverse(attn_windows, self.window_size, H, W)  # B H' W' C
+        x = x.view(B, H * W, C)
+        # FFN
+        x = shortcut + self.drop_path(x)
+        x = x + self.drop_path(self.mlp(self.norm2(x)))
 
         x = rearrange(x, 'B (H W) C -> B C H W', H=H)
         return x
